@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import * as dns from 'dns';
+import * as cookieParser from 'cookie-parser';
+import * as csurf from 'csurf';
+
 
 dns.setDefaultResultOrder('ipv4first');
 import { AppModule } from './app.module';
@@ -8,7 +11,19 @@ import { HttpErrorFilter } from './filters/http-error.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors();
+
+
+  app.enableVersioning({
+    type: VersioningType.URI,
+    prefix: 'api/v',  // Routes become /api/v1/..., /api/v2/..., etc.
+  });
+
+  app.enableCors({
+    origin: 'http://localhost:5173',
+    credentials: true, 
+  });
+  app.use(cookieParser());
+  app.use(csurf({ cookie: true }));
   app.useGlobalFilters(new HttpErrorFilter());
   app.useGlobalPipes(
     new ValidationPipe({

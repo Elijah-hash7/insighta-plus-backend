@@ -1,137 +1,71 @@
-# Insighta Demographic Intelligence API
+# Insighta Labs+ (Stage 3)
 
-A NestJS REST API that serves demographic profile data with advanced filtering, sorting, pagination, and natural language search.
+Insighta Labs+ is a secure, role-based demographic intelligence platform consisting of a NestJS backend, a React web portal, and a Node.js CLI tool. This repository contains the core API system that orchestrates authentication, role enforcement, and data querying.
 
-## Tech Stack
+## System Architecture
 
-- **Runtime**: Node.js + TypeScript
-- **Framework**: NestJS
-- **Database**: PostgreSQL (via TypeORM)
-- **Validation**: class-validator + class-transformer
-- **IDs**: UUID v7 (time-sortable, globally unique)
+The system is built with a strictly typed **NestJS** backend utilizing **PostgreSQL** (via Supabase) for persistence. The architecture follows a multi-interface, single-backend paradigm:
+1. **Backend**: Exposes versioned (`/api/v1`) REST endpoints secured by JWTs.
+2. **Web Portal**: A React/Vite frontend that communicates with the backend via HTTP-only cookies and CSRF protection.
+3. **CLI Tool**: A Node.js command-line interface that authenticates and saves JWTs to the local filesystem (`~/.insighta/credentials.json`).
 
-## Setup
+The architecture ensures that both clients consume the exact same business logic while adhering to client-specific security best practices.
+
+## Authentication Flow
+
+We implemented a stateless authentication strategy using **GitHub OAuth with PKCE (Proof Key for Code Exchange)**.
+
+1. The client (Web or CLI) redirects the user to GitHub to authorize the app.
+2. The client receives a `code` from GitHub.
+3. The client sends the `code` and a `code_verifier` (PKCE) to the backend `POST /api/v1/auth/github`.
+4. The backend verifies the code with GitHub and issues two JWTs:
+   - **Access Token** (15-minute expiry)
+   - **Refresh Token** (7-day expiry, hashed in the database)
+5. The backend sets these tokens as **HTTP-only, Secure cookies** (for the web) AND returns them in the **JSON response body** (for the CLI).
+
+## Token Handling Approach
+
+Because the backend serves two different clients, we utilize a dual-extraction strategy:
+- **Web Portal**: Uses HTTP-only cookies. JavaScript is blocked from reading the token, eliminating XSS vulnerabilities.
+- **CLI Tool**: Saves the tokens to `~/.insighta/credentials.json` and sends the Access Token via the `Authorization: Bearer <token>` header.
+- **Backend `JwtStrategy`**: Automatically checks for the token in the Cookie first, and falls back to the Bearer header if no cookie is present.
+
+## Role Enforcement Logic
+
+Access control is managed via Role-Based Access Control (RBAC).
+- We use a custom `@Roles()` decorator paired with a `RolesGuard`.
+- The `RolesGuard` utilizes NestJS Reflector to check the metadata of the requested route against the `role` payload embedded inside the JWT.
+- Example: Only users with the `ADMIN` or `ANALYST` role can access the demographic profiles endpoints.
+
+## CLI Usage
+
+The CLI tool acts as a dedicated terminal client for analysts.
 
 ```bash
-# Install dependencies
-npm install
+# Login via GitHub OAuth
+insighta login
 
-# Seed the database (2026 profiles)
-npm run seed
+# View your profile and role
+insighta me
 
-# Start the server
-npm run start:dev
+# Browse and filter profiles
+insighta profiles --gender female --limit 10
+
+# Export filtered data to CSV
+insighta export --country NG
+
+# Logout and destroy local credentials
+insighta logout
 ```
 
-The API runs on `http://localhost:3000`.
+## Natural Language Parsing Approach
 
-## Endpoints
+The system includes a custom natural language parser for querying demographics (e.g., *"young males from nigeria"*). 
+- The parser tokenizes the search string and matches keywords against known demographic dictionaries (age ranges, gender, country codes).
+- It dynamically maps these tokens into structured SQL `WHERE` clauses (e.g., mapping "young" to `age < 30`).
+- This allows non-technical analysts to query complex datasets without writing strict filter parameters.
 
-### `GET /api/profiles`
-
-Browse profiles with filtering, sorting, and pagination.
-
-**Query Parameters:**
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `gender` | `male` \| `female` | Filter by gender |
-| `age_group` | `child` \| `teenager` \| `adult` \| `senior` | Filter by age group |
-| `country_id` | string | Filter by 2-letter ISO country code |
-| `min_age` | integer | Minimum age (inclusive) |
-| `max_age` | integer | Maximum age (inclusive) |
-| `min_gender_probability` | float (0-1) | Minimum gender confidence |
-| `min_country_probability` | float (0-1) | Minimum country confidence |
-| `sort_by` | `age` \| `created_at` \| `gender_probability` | Sort field |
-| `order` | `asc` \| `desc` | Sort direction (default: desc) |
-| `page` | integer | Page number (default: 1) |
-| `limit` | integer | Results per page (default: 20, max: 100) |
-
-**Example:**
-```
-GET /api/profiles?gender=female&min_age=25&sort_by=age&order=asc&page=1&limit=10
-```
-
-### `GET /api/profiles/search?q=`
-
-Natural language search that translates human queries into structured filters.
-
-**Examples:**
-
-| Query | Interpreted As |
-|-------|---------------|
-| `young males` | gender=male, age 16-24 |
-| `females above 30` | gender=female, min_age=30 |
-| `people from angola` | country_id=AO |
-| `adult males from kenya` | gender=male, age_group=adult, country_id=KE |
-| `male and female teenagers above 17` | age_group=teenager, min_age=17 |
-
-## Natural Language Parser
-
-### Approach
-
-The parser uses **rule-based keyword matching** — no AI involved. It works in this order:
-
-1. Lowercase and trim the input
-2. Scan for gender keywords (`male`, `males`, `female`, `females`)
-3. Scan for age group keywords (`adult`, `teenager`, `teen`, `senior`, `child`, `kids`)
-4. Check for the `young` keyword (maps to age 16-24 per spec)
-5. Check for age range patterns (`above N`, `below N`, `between N and N`)
-6. Check for country names against a hardcoded country map (sorted longest-first to avoid partial matches)
-
-If at least one keyword matches, the parser returns a structured filter object. If nothing matches, it returns an error.
-
-### Limitations
-
-- **No typo correction** — "mael" won't match "male"
-- **No synonyms beyond basics** — "guys" won't match "males"
-- **Country list is hardcoded** — uncommon countries may be missing
-- **Word order doesn't matter** — "males young" works the same as "young males"
-- **No negation** — "not male" isn't supported
-- **"young" is strictly 16-24** — no flexibility in this range
-
-## Error Handling
-
-All errors follow the format:
-```json
-{
-  "status": "error",
-  "message": "Description of what went wrong"
-}
-```
-
-## Database Design
-
-- **Primary key**: UUID v7 (time-sortable for better index performance)
-- **Indexes**: on `gender`, `age`, `age_group`, `country_id` to avoid full table scans
-- **Unique constraint**: on `name` to support idempotent seeding
-
-## Seed Idempotency
-
-Running `npm run seed` multiple times is safe — it checks each profile by name:
-- If the name doesn't exist → insert with a new UUID v7
-- If the name already exists → update the existing record
-
-## Project Structure
-
-```
-src/
-├── main.ts                          # App entry point (CORS, validation)
-├── app.module.ts                    # Root module (TypeORM + SQLite config)
-├── filters/
-│   └── http-error.filter.ts         # Custom error response format
-├── profiles/
-│   ├── profile.module.ts            # Feature module
-│   ├── profile.controller.ts        # HTTP routes
-│   ├── profile.service.ts           # Query building + business logic
-│   ├── dto/
-│   │   └── filter-profile.dto.ts    # Input validation rules
-│   ├── entities/
-│   │   └── profile.entity.ts        # Database table schema
-│   └── utils/
-│       └── query-parser.ts          # Natural language → filter object
-├── seed/
-│   └── seed.ts                      # Database seeding script
-└── data/
-    └── profiles.json                # 2026 seed profiles
-```
+## Security Features
+- **Rate Limiting**: Globally restricted to 100 requests per minute per IP via `@nestjs/throttler`.
+- **Request Logging**: Custom middleware logging method, path, status, User-Agent, and IP.
+- **CSRF Protection**: Ensured via the `csurf` library for web requests.
