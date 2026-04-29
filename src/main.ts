@@ -1,8 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import * as dns from 'dns';
-import * as cookieParser from 'cookie-parser';
-import * as csurf from 'csurf';
+import cookieParser from 'cookie-parser';
+import csurf from 'csurf';
 
 
 dns.setDefaultResultOrder('ipv4first');
