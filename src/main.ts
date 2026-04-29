@@ -23,7 +23,14 @@ async function bootstrap() {
     credentials: true, 
   });
   app.use(cookieParser());
-  app.use(csurf({ cookie: true }));
+  
+  // Apply CSRF to all routes EXCEPT the auth routes (which need to accept initial POSTs)
+  app.use((req, res, next) => {
+    if (req.path.includes('/auth/')) {
+      return next();
+    }
+    return csurf({ cookie: true })(req, res, next);
+  });
   app.useGlobalFilters(new HttpErrorFilter());
   app.useGlobalPipes(
     new ValidationPipe({
