@@ -19,7 +19,7 @@ async function bootstrap() {
   });
 
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: 'https://insighta-web-kappa.vercel.app',
     credentials: true, 
   });
   app.use(cookieParser());
