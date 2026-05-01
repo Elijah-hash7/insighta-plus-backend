@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { AuthCallbackController } from './auth-callback.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/user.module';
 import { ConfigModule } from '@nestjs/config';
@@ -14,7 +15,7 @@ import { ConfigModule } from '@nestjs/config';
     ConfigModule,
     JwtModule.register({}),  // empty config — we pass secrets per-sign in the service
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AuthCallbackController],
   providers: [AuthService, JwtStrategy],
 })
 export class AuthModule {}

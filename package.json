@@ -7,7 +7,8 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "seed": "ts-node src/seed/seed.ts"
+    "seed": "ts-node src/seed/seed.ts",
+    "gen-test-tokens": "ts-node src/seed/gen-test-tokens.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.19",

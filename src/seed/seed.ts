@@ -1,5 +1,6 @@
 import { DataSource } from 'typeorm';
 import { Profile } from '../profiles/entities/profile.entity';
+import { User } from '../users/entities/user.entity';
 import { v7 as uuidv7 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,7 +15,7 @@ async function seed() {
     type: 'postgres',
     url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/insighta',
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
-    entities: [Profile],
+    entities: [Profile, User],
     synchronize: true,
   });
 
@@ -41,7 +42,37 @@ async function seed() {
     skipUpdateIfNoValuesChanged: true,
   });
 
-  console.log(`✅ Seed complete: Pushed ${profiles.length} profiles to Supabase`);
+  console.log(`Seed complete: Pushed ${profiles.length} profiles to Supabase`);
+
+  const userRepo = dataSource.getRepository(User);
+  const testUsers = [
+    {
+      github_id: 'test-admin',
+      email: 'admin@test.insighta',
+      display_name: 'Test Admin',
+      avatar_url: '',
+      role: 'admin',
+    },
+    {
+      github_id: 'test-analyst',
+      email: 'analyst@test.insighta',
+      display_name: 'Test Analyst',
+      avatar_url: '',
+      role: 'analyst',
+    },
+  ];
+
+  for (const u of testUsers) {
+    const existing = await userRepo.findOne({ where: { github_id: u.github_id } });
+    if (existing) {
+      await userRepo.update(existing.id, { role: u.role, email: u.email, display_name: u.display_name });
+      console.log(`User ${u.github_id} already exists (role=${u.role})`);
+    } else {
+      await userRepo.save(userRepo.create(u));
+      console.log(`Created user ${u.github_id} (role=${u.role})`);
+    }
+  }
+
   await dataSource.destroy();
 }
 

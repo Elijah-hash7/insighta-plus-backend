@@ -40,4 +40,8 @@ export class UsersService {
   async updateRefreshTokenHash(userId: string, hash: string | null): Promise<void> {
     await this.userRepo.update(userId, { refresh_token_hash: hash });
   }
+
+  async setRole(userId: string, role: string): Promise<void> {
+    await this.userRepo.update(userId, { role });
+  }
 }
